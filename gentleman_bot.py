@@ -1,5 +1,7 @@
 import asyncio
+import time
 import logging
+from typing import Optional
 from os import path, getenv, makedirs
 
 import discord
@@ -32,29 +34,56 @@ async def info(ctx):
         theme_path = path.join(storage_dir, str(ctx.guild.id), "global")
 
     if path.isfile(theme_path):
-        await ctx.reply("Theme setted")
+        await ctx.send("Theme setted")
     else:
-        await ctx.reply("No theme setted")
+        await ctx.send("No theme setted")
+    
 
-
-@bot.command()
-async def theme(ctx, attachment: discord.Attachment):
+@bot.command("global")
+@commands.has_guild_permissions(administrator=True)
+async def global_set(ctx: commands.Context, attachment: discord.Attachment, guild: discord.Guild = commands.CurrentGuild):
     # TODO: validate attachment
+    try:
+        theme_path = path.join(storage_dir, str(guild.id), "global")
+        makedirs(path.dirname(theme_path), exist_ok=True)
+        await attachment.save(theme_path)
+        await ctx.send("New global theme setted")
+    except Exception as err:
+        logging.error(err)
+        await ctx.send("An internal error occurred")
 
-    if ctx.message.mentions:
-        theme_path = path.join(
-            storage_dir, str(ctx.guild.id), str(ctx.message.mentions[0].id)
-        )
-    else:
-        theme_path = path.join(storage_dir, str(ctx.guild.id), "global")
+@bot.command("theme")
+async def individual_set(ctx: commands.Context, member: Optional[discord.Member], attachment: discord.Attachment, guild: discord.Guild = commands.CurrentGuild):
+    # TODO: validate attachment
+    try:
+        if member is not None:
+            theme_path = path.join(storage_dir, str(guild.id), str(member.id))
+        else:
+            theme_path = path.join(storage_dir, str(guild.id), str(ctx.author.id))
 
-    makedirs(path.dirname(theme_path), exist_ok=True)
-    await attachment.save(theme_path)
+        makedirs(path.dirname(theme_path), exist_ok=True)
+        await attachment.save(theme_path)
+        await ctx.send("Theme setted for [user here]")
+    except Exception as err:
+        logging.error(err)
+        await ctx.send("An internal error occurred")
 
 
 @bot.event
-async def on_command_error(_ctx, err):
+async def on_command_error(ctx: commands.Context, err):
     if isinstance(err, commands.CommandNotFound):
+        return
+
+    if isinstance(err, commands.MissingRequiredAttachment):
+        await ctx.send("Command expects an attachment")
+        return
+
+    if isinstance(err, commands.NoPrivateMessage):
+        await ctx.send("Command must be issued inside a server")
+        return
+
+    if isinstance(err, commands.MissingPermissions):
+        await ctx.send("You cannot use this command. Must have this permissions: " + ", ".join(err))
         return
 
     logging.warning(err)
